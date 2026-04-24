@@ -23,6 +23,8 @@ try:
     )
     from backend.services.prompt_generator import build_payload
     from backend.services.prompt_guard import validate_generation_prompt
+    from backend.services.file_processor import process_file
+    from backend.services.syllabus_parser import parse_syllabus_content
 except ImportError:
     from services.document_exporter import (
         build_preview_text,
@@ -33,6 +35,8 @@ except ImportError:
     )
     from services.prompt_generator import build_payload
     from services.prompt_guard import validate_generation_prompt
+    from services.file_processor import process_file
+    from services.syllabus_parser import parse_syllabus_content
 
 warnings.filterwarnings("ignore")
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
@@ -54,20 +58,20 @@ N8N_WEBHOOK_URL = os.getenv(
 
 def _save_uploaded_file(uploaded_file):
     if not uploaded_file or not uploaded_file.filename:
-        return ""
+        return "", ""
 
     original_name = secure_filename(uploaded_file.filename)
     _, extension = os.path.splitext(original_name)
     extension = extension.lower()
 
     if extension not in ALLOWED_EXTENSIONS:
-        return ""
+        return "", ""
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     saved_name = f"{uuid4().hex}{extension}"
     saved_path = os.path.join(UPLOAD_DIR, saved_name)
     uploaded_file.save(saved_path)
-    return saved_path
+    return saved_path, original_name
 
 
 def _post_to_n8n(payload):
@@ -135,36 +139,129 @@ def download_file(filename):
 def generate():
     try:
         data = request.form.to_dict() or request.get_json(silent=True) or {}
-        uploaded_file = request.files.get("file")
-        saved_file_path = _save_uploaded_file(uploaded_file)
+        uploaded_files = request.files.getlist("file")
+        
+        saved_file_paths = []
+        original_filenames = []
+        
+        for uf in uploaded_files:
+            sf, of = _save_uploaded_file(uf)
+            if sf:
+                saved_file_paths.append(sf)
+                original_filenames.append(of)
 
         print("\n┌─── REQUEST ───────────────────────────────────────", flush=True)
         print(f"│  Content-Type : {request.content_type}", flush=True)
         print(f"│  Form Keys    : {', '.join(data.keys()) or '(none)'}", flush=True)
-        if uploaded_file:
-            print(f"│  File         : {uploaded_file.filename}  ({uploaded_file.content_type})", flush=True)
-            print(f"│  Saved To     : {saved_file_path}", flush=True)
+        if original_filenames:
+            for of in original_filenames:
+                print(f"│  File         : {of}", flush=True)
+            print(f"│  Saved To     : {', '.join(saved_file_paths)}", flush=True)
         else:
             print("│  File         : (none)", flush=True)
         print("└──────────────────────────────────────────────────", flush=True)
 
-        if saved_file_path:
-            data["file_path"] = saved_file_path
+        if saved_file_paths:
+            data["file_paths"] = saved_file_paths
+        if original_filenames:
+            data["document_names"] = original_filenames
 
+        # 1. Text Extraction and Page Counting
+        combined_text = ""
+        total_pdf_pages = 0
+        if saved_file_paths:
+            print("│  Status       : Extracting text from files...", flush=True)
+            for sp in saved_file_paths:
+                file_text = process_file(sp)
+                if file_text:
+                    combined_text += "\n" + file_text
+                    
+                if sp.lower().endswith(".pdf"):
+                    try:
+                        import pdfplumber
+                        with pdfplumber.open(sp) as pdf:
+                            total_pdf_pages += len(pdf.pages)
+                    except Exception as ext:
+                        print(f"│  Error        : PDF page count failed ({ext})", flush=True)
+
+        # 2. Syllabus Parsing (JSON Format)
+        syllabus_validation = {}
+        if combined_text.strip():
+            print("│  Status       : Parsing syllabus content...", flush=True)
+            syllabus_validation = parse_syllabus_content(combined_text, total_pages=total_pdf_pages)
+            
+            if not syllabus_validation.get("is_valid", False):
+                print(f"│  Error        : Invalid syllabus ({syllabus_validation.get('reason')})", flush=True)
+                return jsonify({
+                    "status": "error",
+                    "message": syllabus_validation.get("reason", "Uploaded document is not a valid syllabus."),
+                    "error_code": "INVALID_SYLLABUS",
+                }), 422
+            
+            data["syllabus_metadata"] = syllabus_validation.get("extracted_data", {})
+
+        # 3. Subject Mismatch Validation
+        if data.get("syllabus_metadata"):
+            user_subject = str(data.get("subject", "")).strip()
+            parsed_subject = str(data["syllabus_metadata"].get("subject", "")).strip()
+            
+            if user_subject:
+                print(f"│  Validation   : Comparing user subject '{user_subject}' with parsed subject '{parsed_subject}'", flush=True)
+                
+                common_stopwords = {"and", "of", "the", "in", "to", "for", "course", "subject", "code", "name", "title", "lab", "systems", "engineering", "introduction", "advanced", "basic", "basics", "applied", "principles", "fundamentals", "theory", "part"}
+                
+                user_w = set(re.findall(r'\b\w+\b', user_subject.lower())) - common_stopwords
+                parsed_w = set(re.findall(r'\b\w+\b', parsed_subject.lower())) - common_stopwords
+                
+                is_substring = user_subject.lower() in parsed_subject.lower() or parsed_subject.lower() in user_subject.lower()
+                has_intersection = bool(parsed_w.intersection(user_w))
+                
+                is_acronym_match = False
+                if len(user_subject) <= 5 and user_subject.isalpha():
+                    doc_head_words = [w for w in re.findall(r'\b[a-zA-Z]+\b', parsed_subject.lower()) if w not in common_stopwords]
+                    doc_initials = "".join([w[0] for w in doc_head_words])
+                    if user_subject.lower() in doc_initials:
+                        is_acronym_match = True
+
+                if not (has_intersection or is_substring or is_acronym_match):
+                    exact_pattern = r'\b' + re.escape(user_subject.lower()) + r'\b'
+                    is_in_text = bool(re.search(exact_pattern, combined_text.lower()))
+                    if not is_in_text:
+                        print(f"│  Error        : Subject mismatch. User: {user_subject}, Doc: {parsed_subject}", flush=True)
+                        return jsonify({
+                            "status": "error",
+                            "message": "Entered subject is a mismatch you please check again",
+                            "error_code": "SUBJECT_MISMATCH",
+                        }), 422
+
+        # 4. Custom Prompt Checking (Academic Only)
+        print("│  Status       : Checking academic relevance of custom prompt...", flush=True)
         is_valid_prompt, prompt_error = validate_generation_prompt(
             data.get("prompt", data.get("custom_prompt", "")),
             data.get("subject", ""),
         )
         if not is_valid_prompt:
-            return jsonify(
-                {
-                    "status": "error",
-                    "message": prompt_error,
-                    "error_code": "INVALID_PROMPT",
-                }
-            ), 422
+            print(f"│  Error        : {prompt_error}", flush=True)
+            return jsonify({
+                "status": "error",
+                "message": prompt_error,
+                "error_code": "INVALID_PROMPT",
+            }), 422
 
         payload, debug = build_payload(data)
+        
+        print("\n=== DEBUG: PAYLOAD CONTENT ===")
+        print(json.dumps({k: v[:50] if isinstance(v, str) else v for k, v in payload.items()}, indent=2))
+        print("==============================\n", flush=True)
+
+        with open("last_debug_output.json", "w") as f:
+            import copy
+            debug_safe = copy.deepcopy(debug)
+            if "source_document" in debug_safe:
+                debug_safe["source_document"]["text"] = str(debug_safe["source_document"].get("text", ""))[:100] + "..."
+                debug_safe["source_document"]["context"] = str(debug_safe["source_document"].get("context", ""))[:100] + "..."
+            json.dump({"payload": payload, "debug": debug_safe, "file_paths": saved_file_paths}, f, indent=2)
+
         source_document = debug.get("source_document", {})
         n8n_result = _post_to_n8n(payload)
         n8n_body = n8n_result.get("body", {})
@@ -179,6 +276,19 @@ def generate():
                     "n8n_response": n8n_body,
                 }
             ), 422
+
+        # Final check: Is this a valid paper?
+        from services.document_exporter import _is_question_paper_payload, _extract_nested_payload
+        extracted_payload = _extract_nested_payload(n8n_body)
+        if not _is_question_paper_payload(extracted_payload):
+            print("│  Error        : AI generation failed or returned invalid data.", flush=True)
+            print(f"│  Response     : {json.dumps(n8n_body)[:200]}...", flush=True)
+            return jsonify({
+                "status": "error",
+                "message": "Internal server error occurred",
+                "error_code": "GENERATION_FAILED",
+                "n8n_response": n8n_body
+            }), 500
 
         preview_text = build_preview_text(n8n_body)
         preview_paper = normalize_question_paper(

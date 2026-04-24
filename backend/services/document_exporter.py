@@ -9,11 +9,26 @@ else:
     from backend.services.docx_compat import Document, Pt, WD_PARAGRAPH_ALIGNMENT
 
 
+# Regex to remove invalid XML 1.0 characters to prevent Word corruption
+# Allowed: #x9, #xA, #xD, [#x20-#xD7FF], [#xE000-#xFFFD], [#x10000-#x10FFFF]
+ILLEGAL_XML_RE = re.compile(
+    u'[^'
+    u'\u0009\u000A\u000D'
+    u'\u0020-\uD7FF'
+    u'\uE000-\uFFFD'
+    u'\U00010000-\U0010FFFF'
+    u']+'
+)
+
+
 def _stringify(value: Any, depth: int = 0) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
-        return value.strip()
+        cleaned = ILLEGAL_XML_RE.sub('', value)
+        # Also remove vertical tabs and other niche control chars that might slip through
+        cleaned = cleaned.replace('\x0b', '').replace('\x0c', '').replace('\x00', '')
+        return cleaned.strip()
     if isinstance(value, dict):
         parts = []
         if "option_label" in value:
@@ -46,7 +61,9 @@ def _stringify(value: Any, depth: int = 0) -> str:
         indent = "  " * depth
         return "\n".join(f"{indent}{bullet} {_stringify(item, depth + 1)}" for item in value)
 
-    return str(value).strip()
+    # Fallback for other types
+    text_val = str(value).strip()
+    return ILLEGAL_XML_RE.sub('', text_val)
 
 
 def parse_n8n_body(raw_body: str) -> Any:
@@ -169,12 +186,11 @@ def _extract_nested_payload(value: Any) -> Any:
 
 
 def _is_question_paper_payload(data: Any) -> bool:
-    return isinstance(data, dict) and (
-        "sections" in data
-        or "general_instructions" in data
-        or "title" in data
-        or "subject" in data
-    )
+    if not isinstance(data, dict):
+        return False
+        
+    has_sections = isinstance(data.get("sections"), list) and len(data["sections"]) > 0
+    return has_sections
 
 
 def _get_first_non_empty(mapping: Dict[str, Any], keys: List[str]) -> str:

@@ -34,7 +34,8 @@ def _clean_text(text: str) -> str:
     if not text:
         return ""
 
-    cleaned = text.replace("\x00", " ")
+    # Replace control characters (except Tab, CR, LF) with space to prevent downstream DOCX generation errors
+    cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', ' ', text)
     cleaned = re.sub(r"\r\n?", "\n", cleaned)
     cleaned = re.sub(r"[ \t]+", " ", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)

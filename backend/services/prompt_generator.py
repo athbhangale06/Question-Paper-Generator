@@ -39,11 +39,13 @@ def build_payload(data):
     marks = data.get("totalMarks", data.get("marks", 50))
     custom = data.get("prompt", data.get("custom_prompt", ""))
     sections = data.get("sections", [])
+    incoming_document = data.get("document", {})
     topic = data.get(
         "topic",
         data.get("query", data.get("keyword", data.get("custom_prompt", data.get("prompt", subject)))),
     )
-    file_path = data.get("file_path", data.get("pdf_path", ""))
+    file_paths = data.get("file_paths", []) or ([data.get("file_path")] if data.get("file_path") else ([data.get("pdf_path")] if data.get("pdf_path") else []))
+    document_names = data.get("document_names", []) or ([data.get("document_name")] if data.get("document_name") else [])
 
     # --- Clean values ---
     subject = str(subject).strip()
@@ -52,7 +54,8 @@ def build_payload(data):
     difficulty = str(difficulty).strip()
     custom = str(custom).strip()
     topic = str(topic).strip()
-    file_path = str(file_path).strip()
+    file_paths = [str(p).strip() for p in file_paths if str(p).strip()]
+    document_names = [str(n).strip() for n in document_names if str(n).strip()]
 
     try:
         marks = int(marks)
@@ -72,83 +75,104 @@ def build_payload(data):
 
     retrieval_topic = custom or topic or subject
 
-    document_data = process_document_for_ai(file_path, retrieval_topic) if file_path else {
-        "file_path": file_path,
-        "file_type": "",
-        "text": "",
-        "chunks": [],
-        "compressed_chunks": [],
-        "selected_chunks": [],
-        "summaries": [],
-        "context": "",
-        "ocr_used": False,
-    }
+    all_document_data = []
+    combined_file_content = ""
+    combined_text = ""
 
-    selected_chunks = document_data["summaries"][:2] if document_data["summaries"] else []
-    if not selected_chunks and document_data["selected_chunks"]:
-        selected_chunks = document_data["selected_chunks"][:2]
-    if not selected_chunks and document_data["compressed_chunks"]:
-        selected_chunks = document_data["compressed_chunks"][:1]
-    if not selected_chunks and document_data["chunks"]:
-        selected_chunks = document_data["chunks"][:1]
+    for fp in file_paths:
+        doc_data = process_document_for_ai(fp, retrieval_topic) if fp else None
+        if doc_data:
+            all_document_data.append(doc_data)
+            sel_chunks = doc_data.get("summaries", [])[:2] if doc_data.get("summaries") else []
+            if not sel_chunks and doc_data.get("selected_chunks"):
+                sel_chunks = doc_data.get("selected_chunks")[:2]
+            if not sel_chunks and doc_data.get("compressed_chunks"):
+                sel_chunks = doc_data.get("compressed_chunks")[:1]
+            if not sel_chunks and doc_data.get("chunks"):
+                sel_chunks = doc_data.get("chunks")[:1]
+                
+            fc = "\n\n".join(chunk.strip() for chunk in sel_chunks if chunk).strip()
+            if fc:
+                combined_file_content += f"\n\n--- Source File ---\n{fc}"
+            if doc_data.get("text"):
+                combined_text += f"\n\n{doc_data['text']}"
 
-    file_content = "\n\n".join(chunk.strip() for chunk in selected_chunks if chunk).strip()
-    if len(file_content) > 1800:
-        file_content = file_content[:1800].rsplit(" ", 1)[0].strip()
+    combined_file_content = combined_file_content.strip()
+    combined_text = combined_text.strip()
+    if len(combined_file_content) > 3000:
+        combined_file_content = combined_file_content[:3000].rsplit(" ", 1)[0].strip()
 
-    title = f"{subject or 'General'} - {grade or 'General'} Question Paper"
+    incoming_document_name = ""
+    incoming_document_content = ""
+    if isinstance(incoming_document, dict):
+        incoming_document_name = str(incoming_document.get("name", "")).strip()
+        incoming_document_content = str(incoming_document.get("content", "")).strip()
+
+    resolved_document_name = (
+        incoming_document_name
+        or (", ".join(document_names) if document_names else "")
+        or (file_paths[0].split("\\")[-1] if file_paths else "")
+    )
     
-    if custom:
-        strong_instruction = (
-            "CRITICAL DIRECTIVE: You MUST strictly adhere to the following user instructions. "
-            "If the user specifies an institute name, university, or header, you MUST include it in a 'header' field at the top level of the JSON. "
-            "If the user specifies a time or duration, you MUST include it in a 'time' field at the top level of the JSON. "
-            "If the user specifies exact section layouts (e.g., 'Q1 A or Q1 B', specific marks, optional questions), "
-            "you MUST format the 'sections' array exactly as requested without any deviation. "
-            "You MUST return the FULL question paper, not a partial paper, and the total output must satisfy the requested structure and marks.\n\n"
-            f"USER INSTRUCTIONS:\n{custom}"
-        )
-        custom_instruction = strong_instruction
+    extracted_text = str(
+        data.get("file_content") 
+        or incoming_document_content 
+        or combined_file_content 
+        or combined_text 
+        or ""
+    ).strip()
+
+    if len(extracted_text) > 2000:
+        extracted_text = extracted_text[:2000].rsplit(" ", 1)[0] + "..."
+
+
+    # Format Syllabus metadata if available
+    syllabus_metadata = data.get("syllabus_metadata", {})
+    syllabus_file_content = syllabus_metadata.get("fileContent", "")
+    
+    # Prioritize what syllabus parser gave us
+    if syllabus_file_content:
+        extracted_text = syllabus_file_content
     else:
-        custom_instruction = f"Generate a complete {subject} question paper for {grade}."
+        # Fallback to the old formatting if for some reason fileContent is missing from metadata
+        if syllabus_metadata:
+            syllabus_injection = "\n\n[SYLLABUS CONTEXT]\n"
+            if syllabus_metadata.get("subject"):
+                syllabus_injection += f"Syllabus Subject: {syllabus_metadata['subject']}\n"
+            if syllabus_metadata.get("topics"):
+                syllabus_injection += "Key Topics: " + ", ".join(syllabus_metadata['topics']) + "\n"
+            if syllabus_metadata.get("units"):
+                syllabus_injection += "Modules/Units:\n"
+                for u in syllabus_metadata["units"][:5]:
+                    syllabus_injection += f"- {u.get('name', 'Module')}\n"
+                    if u.get('topics'):
+                        syllabus_injection += "   Topics: " + ", ".join(u['topics'][:5]) + "\n"
+            if syllabus_metadata.get("course_outcomes"):
+                syllabus_injection += "Course Outcomes:\n" + "\n".join([f"- {co}" for co in syllabus_metadata['course_outcomes']])
+                
+            extracted_text = syllabus_injection.strip() + "\n\n" + extracted_text
+            extracted_text = extracted_text.strip()
 
-    if sections_instruction:
-        custom_instruction = f"{custom_instruction}\n\nSECTION REQUIREMENTS:\n{sections_instruction}"
-
-    # --- Final n8n-ready payload ---
     payload = {
-        "title": title,
-        "subject": subject,
-        "marks": marks,
-        "total_marks": marks,
-        "grade": grade,
-        "board": board,
-        "difficulty": difficulty,
-        "custom_instruction": custom_instruction,
-        "user_instructions": custom_instruction,
-        "topic": retrieval_topic,
-        "sections": sections,
-        "section_requirements": sections_instruction,
-        "file_content": file_content,
-        "reference_content": file_content,
-        "source_type": document_data["file_type"],
-        "has_reference_content": bool(file_content),
-        "ocr_used": bool(document_data["ocr_used"]),
+        "subject": data.get("subject"),
+        "marks": int(data.get("marks", 0)) if data.get("marks") else 0,
+        "grade": data.get("grade"),
+        "board": data.get("board"),
+        "difficulty": data.get("difficulty"),
+        "custom_instruction": custom,
+        "fileContent": extracted_text
     }
 
     debug = {
         "sections": sections,
         "retrieval_topic": retrieval_topic,
+        "section_requirements": sections_instruction,
+        "document_preview": combined_file_content,
         "source_document": {
-            "file_path": document_data["file_path"],
-            "file_type": document_data["file_type"],
-            "text": document_data["text"],
-            "chunks": document_data["chunks"],
-            "compressed_chunks": document_data["compressed_chunks"],
-            "selected_chunks": document_data["selected_chunks"],
-            "summaries": document_data["summaries"],
-            "context": document_data["context"],
-            "ocr_used": document_data["ocr_used"],
+            "file_paths": file_paths,
+            "text": combined_text,
+            "context": combined_file_content,
+            "parsed_files": len(all_document_data),
         },
     }
 

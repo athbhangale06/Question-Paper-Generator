@@ -1,0 +1,50 @@
+{
+  "payload": {
+    "subject": "theortical computer science",
+    "marks": 50,
+    "grade": "Under Graduate",
+    "board": "Other",
+    "difficulty": "Advanced",
+    "custom_instruction": "Generate a question paper with the following structure. Total marks = 50.\r\n\r\nSection A (20 marks):\r\nQ1.A (10 marks) \u2014 Generate 2 sub-questions (5 marks each). Label as 1. and 2.\r\nOR\r\nQ1.B (10 marks) \u2014 Generate 2 alternative sub-questions (5 marks each). Label as 1. and 2.\r\n\r\nSection B (20 marks):\r\nQ2.A (10 marks) OR Q2.B (10 marks) \u2014 Each as a single long answer question\r\nQ3.A (10 marks) OR Q3.B (10 marks) \u2014 Each as a single long answer question\r\n\r\nSection C (10 marks):\r\nQ4.A (10 marks) OR Q4.B (10 marks) \u2014 Each as a single long answer question\r\nQ5.A (10 marks) OR Q5.B (10 marks) \u2014 Each as a single long answer question\r\n\r\nRules:\r\n- Every question must have an A and B alternative\r\n- A and B in each pair must be based on the same topic/CO\r\n- Label alternatives clearly as Q1.A / Q1.B etc.\r\n- Total marks must equal exactly 50",
+    "fileContent": "Course Outcomes:\n- On successful completion, of course, learner/student will be able to:\n- 1 Recall definitions of formal languages, automata, and expressions. (remembering)\n- 2 Explain equivalences and conversions between finite automata models. (understanding)\n- 3 Construct regular expressions, finite automata, and regular grammars and apply Pumping\n- Lemma and closure properties. (applying)\n- 4 Analyze context-free grammars, derivations, ambiguity. (analyzing)\n- 5 Construct and evaluate pushdown automata and use instantaneous descriptions to determine\n- string acceptance. (evaluating)\n- 6 Design Turing machines for language recognition/computation and explain undecidability.\n- (creating)\n\nDetailed Syllabus Units:\nModule/Unit: Module Detailed Contents Hours\n  \u2022 1 Foundations of Computation 3\n  \u2022 Strings, Alphabet, Language, Operations, Finite state machine,\n  \u2022 definitions, finite automaton model, acceptance of strings, and\n  \u2022 languages.\n  \u2022 Self Study: Solve problems as a finite automaton.\n  \u2022 2 Finite Automata 10\n  \u2022 Finite Automata: DFA and NFA, and Equivalence of DFA & NFA,\n  \u2022 Minimization of DFA, Mealy and Moore machines and\n  \u2022 equivalence.\n  \u2022 Self Learning: Explore how Mealy and Moore machines are used in\n  \u2022 real-world digital systems like traffic lights, elevators, and vending\n  \u2022 machines.\n  \u2022 3 Regular Languages 9\n  \u2022 Regular Grammar, Closure Properties, Arden Theorem, Regular\n  \u2022 expression to FA, DFA to Regular expression.\n  \u2022 Pumping Lemma, Decision Properties of Regular Languages.\n  \u2022 Self Learning: Practical Applications of Regular Languages,\n  \u2022 4 Context-Free Grammars 9\n  \u2022 Production systems, Right linear grammar and Left Linear Grammar,\n  \u2022 Equivalence of grammar and finite automata.\n  \u2022 Context free grammars, Derivations, Ambiguity, Ambiguous to\n  \u2022 Unambiguous CFG.\n  \u2022 Normal forms, Pumping Lemma for CFLs.\n  \u2022 Self Learning: Subfamilies of CFL\n  \u2022 5 Pushdown Automata 6\n  \u2022 Pushdown Automata (PDA), Language Acceptance, Acceptance by\n  \u2022 final state and empty stack\n  \u2022 Equivalence between push- down automata and context-free\n  \u2022 grammars.\n  \u2022 Self Learning: Instantaneous descriptions (IDs) to follow PDA\n  \u2022 computations.\n  \u2022 6 Turing Machines and Undecidability 8\n  \u2022 Recursive & Recursively Enumerable Languages, Turing Machines:\n  \u2022 Basic Model,Techniques for Turing machine construction,\n  \u2022 Language Recognition.\n  \u2022 Variants of TM, Universal Turing machine\n  \u2022 Halting Problem, Decidable and undecidable problems, Post's\n  \u2022 correspondence problem, Introduction to Theory of NP-\n  \u2022 completeness.\n  \u2022 Self Learning: Non- deterministic Turing machine, Rice's theorem\n  \u2022 TOTAL 45"
+  },
+  "debug": {
+    "sections": [
+      {
+        "id": "A",
+        "type": "Objective Analysis",
+        "marks": 1,
+        "count": 10,
+        "enabled": true
+      },
+      {
+        "id": "B",
+        "type": "Conceptual Synthesis",
+        "marks": 3,
+        "count": 5,
+        "enabled": true
+      },
+      {
+        "id": "C",
+        "type": "Comprehensive Argumentation",
+        "marks": 5,
+        "count": 3,
+        "enabled": true
+      }
+    ],
+    "retrieval_topic": "Generate a question paper with the following structure. Total marks = 50.\r\n\r\nSection A (20 marks):\r\nQ1.A (10 marks) \u2014 Generate 2 sub-questions (5 marks each). Label as 1. and 2.\r\nOR\r\nQ1.B (10 marks) \u2014 Generate 2 alternative sub-questions (5 marks each). Label as 1. and 2.\r\n\r\nSection B (20 marks):\r\nQ2.A (10 marks) OR Q2.B (10 marks) \u2014 Each as a single long answer question\r\nQ3.A (10 marks) OR Q3.B (10 marks) \u2014 Each as a single long answer question\r\n\r\nSection C (10 marks):\r\nQ4.A (10 marks) OR Q4.B (10 marks) \u2014 Each as a single long answer question\r\nQ5.A (10 marks) OR Q5.B (10 marks) \u2014 Each as a single long answer question\r\n\r\nRules:\r\n- Every question must have an A and B alternative\r\n- A and B in each pair must be based on the same topic/CO\r\n- Label alternatives clearly as Q1.A / Q1.B etc.\r\n- Total marks must equal exactly 50",
+    "section_requirements": "Section A: Objective Analysis | 10 questions | 1 marks each | 10 total marks\nSection B: Conceptual Synthesis | 5 questions | 3 marks each | 15 total marks\nSection C: Comprehensive Argumentation | 3 questions | 5 marks each | 15 total marks\nIMPORTANT: Generate the COMPLETE paper for all sections above. Do not stop early, do not omit any section, and ensure the full paper covers 40 marks across the configured sections.",
+    "document_preview": "--- Source File ---\nTheory ESE Question Paper Pattern is as follows: \uf0b7 For each question, A and B should be based on the same CO. \uf0b7 ESE should be based on 30% syllabus of MSE and 70% syllabus Course - TW- 25 \uf0b7 Active Participation (Lab) = 5 marks\n\nDesign a PDA to accept a context-free language and show conversion between Design a Turing Machine to recognize a specific language and demonstrate Theory CA-20 Certification: NPTEL (20 Marks) (Approved by instructor) Theory MSE Question Paper Pattern is as follows:",
+    "source_document": {
+      "file_paths": [
+        "C:\\Users\\menon\\Downloads\\7363aa88eea64486b043eac0bb1f0010.pdf"
+      ],
+      "text": "Program Structure for Second Year Computer Engineering\nUNIVERSITY OF MUMBAI (With Effect from 2025-2...",
+      "context": "--- Source File ---\nTheory ESE Question Paper Pattern is as follows: \uf0b7 For each question, A and B sh...",
+      "parsed_files": 1
+    }
+  },
+  "file_paths": [
+    "C:\\Users\\menon\\Downloads\\7363aa88eea64486b043eac0bb1f0010.pdf"
+  ]
+}
